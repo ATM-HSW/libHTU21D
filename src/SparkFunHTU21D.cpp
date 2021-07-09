@@ -23,23 +23,18 @@
   HTU21D.read_user_register() returns the user register. Used to set resolution.
 */
 
-#include <Wire.h>
-
+#include "mbed.h"
 #include "SparkFunHTU21D.h"
 
-HTU21D::HTU21D()
-{
+HTU21D::HTU21D() {
   //Set initial values for private vars
 }
 
 //Begin
 /*******************************************************************************************/
 //Start I2C communication
-void HTU21D::begin(TwoWire &wirePort)
-{
-  _i2cPort = &wirePort; //Grab which port the user wants us to use
-  
-  _i2cPort->begin();
+void HTU21D::begin(I2C &i2c) {
+  _i2c = &i2c; //Grab which port the user wants us to use
 }
 
 #define MAX_WAIT 100
@@ -47,34 +42,28 @@ void HTU21D::begin(TwoWire &wirePort)
 #define MAX_COUNTER (MAX_WAIT/DELAY_INTERVAL)
 
 //Given a command, reads a given 2-byte value with CRC from the HTU21D
-uint16_t HTU21D::readValue(byte cmd)
-{
+uint16_t HTU21D::readValue(uint8_t cmd) {
+  int ret;
+  
   //Request a humidity reading
-  _i2cPort->beginTransmission(HTU21D_ADDRESS);
-  _i2cPort->write(cmd); //Measure value (prefer no hold!)
-  _i2cPort->endTransmission();
+  _buf[0] = cmd;
+  ret = _i2c->write(HTU21D_ADDRESS, (const char*)_buf, 1);
   
   //Hang out while measurement is taken. datasheet says 50ms, practice may call for more
   bool validResult;
-  byte counter;
-  for (counter = 0, validResult = 0 ; counter < MAX_COUNTER && !validResult ; counter++)
-  {
-    delay(DELAY_INTERVAL);
+  uint8_t counter;
+  for (counter = 0, validResult = 0 ; counter < MAX_COUNTER && !validResult ; counter++) {
+    thread_sleep_for(DELAY_INTERVAL);
 
-    //Comes back in three bytes, data(MSB) / data(LSB) / Checksum
-    validResult = (3 == _i2cPort->requestFrom(HTU21D_ADDRESS, 3));
+    //stop the loop when i2c device is readable
+    validResult = !_i2c->read(HTU21D_ADDRESS, (char*)_buf, 3);
   }
 
   if (!validResult) return (ERROR_I2C_TIMEOUT); //Error out
 
-  byte msb, lsb, checksum;
-  msb = _i2cPort->read();
-  lsb = _i2cPort->read();
-  checksum = _i2cPort->read();
+  uint16_t rawValue = ((uint16_t) _buf[0] << 8) | (uint16_t) _buf[1];
 
-  uint16_t rawValue = ((uint16_t) msb << 8) | (uint16_t) lsb;
-
-  if (checkCRC(rawValue, checksum) != 0) return (ERROR_BAD_CRC); //Error out
+  if (checkCRC(rawValue, _buf[2]) != 0) return (ERROR_BAD_CRC); //Error out
 
   return rawValue & 0xFFFC; // Zero out the status bits
 }
@@ -84,8 +73,7 @@ uint16_t HTU21D::readValue(byte cmd)
 //Calc humidity and return it to the user
 //Returns 998 if I2C timed out
 //Returns 999 if CRC is wrong
-float HTU21D::readHumidity(void)
-{
+float HTU21D::readHumidity(void) {
   uint16_t rawHumidity = readValue(TRIGGER_HUMD_MEASURE_NOHOLD);
   
   if(rawHumidity == ERROR_I2C_TIMEOUT || rawHumidity == ERROR_BAD_CRC) return(rawHumidity);
@@ -102,8 +90,7 @@ float HTU21D::readHumidity(void)
 //Calc temperature and return it to the user
 //Returns 998 if I2C timed out
 //Returns 999 if CRC is wrong
-float HTU21D::readTemperature(void)
-{
+float HTU21D::readTemperature(void) {
   uint16_t rawTemperature = readValue(TRIGGER_TEMP_MEASURE_NOHOLD);
 
   if(rawTemperature == ERROR_I2C_TIMEOUT || rawTemperature == ERROR_BAD_CRC) return(rawTemperature);
@@ -125,11 +112,10 @@ float HTU21D::readTemperature(void)
 // 1/1 = 11bit RH, 11bit Temp
 //Power on default is 0/0
 
-void HTU21D::setResolution(byte resolution)
-{
-  byte userRegister = readUserRegister(); //Go get the current register state
-  userRegister &= B01111110; //Turn off the resolution bits
-  resolution &= B10000001; //Turn off all other bits but resolution bits
+void HTU21D::setResolution(uint8_t resolution) {
+  uint8_t userRegister = readUserRegister(); //Go get the current register state
+  userRegister &= 0b01111110; //Turn off the resolution bits
+  resolution &= 0b10000001; //Turn off all other bits but resolution bits
   userRegister |= resolution; //Mask in the requested resolution bits
 
   //Request a write to user register
@@ -137,29 +123,26 @@ void HTU21D::setResolution(byte resolution)
 }
 
 //Read the user register
-byte HTU21D::readUserRegister(void)
-{
-  byte userRegister;
+uint8_t HTU21D::readUserRegister(void) {
+  int ret;
+  uint8_t userRegister;
 
   //Request the user register
-  _i2cPort->beginTransmission(HTU21D_ADDRESS);
-  _i2cPort->write(READ_USER_REG); //Read the user register
-  _i2cPort->endTransmission();
+  _buf[0] = READ_USER_REG;
+  ret = _i2c->write(HTU21D_ADDRESS, (const char*)_buf, 1); //Read the user register
 
   //Read result
-  _i2cPort->requestFrom(HTU21D_ADDRESS, 1);
-
-  userRegister = _i2cPort->read();
+  ret = _i2c->read(HTU21D_ADDRESS, (char*)_buf, 1);
+  userRegister = _buf[0];
 
   return (userRegister);
 }
 
-void HTU21D::writeUserRegister(byte val)
-{
-  _i2cPort->beginTransmission(HTU21D_ADDRESS);
-  _i2cPort->write(WRITE_USER_REG); //Write to the user register
-  _i2cPort->write(val); //Write the new resolution bits
-  _i2cPort->endTransmission();
+void HTU21D::writeUserRegister(uint8_t val) {
+  int ret;
+  _buf[0] = WRITE_USER_REG; //Write to the user register
+  _buf[1] = val;            //Write the new resolution bits
+  ret = _i2c->write(HTU21D_ADDRESS, (const char*)_buf, 2);
 }
 
 //Give this function the 2 byte message (measurement) and the check_value byte from the HTU21D
@@ -169,8 +152,7 @@ void HTU21D::writeUserRegister(byte val)
 //POLYNOMIAL = 0x0131 = x^8 + x^5 + x^4 + 1 : http://en.wikipedia.org/wiki/Computation_of_cyclic_redundancy_checks
 #define SHIFTED_DIVISOR 0x988000 //This is the 0x0131 polynomial shifted to farthest left of three bytes
 
-byte HTU21D::checkCRC(uint16_t message_from_sensor, uint8_t check_value_from_sensor)
-{
+uint8_t HTU21D::checkCRC(uint16_t message_from_sensor, uint8_t check_value_from_sensor) {
   //Test cases from datasheet:
   //message = 0xDC, checkvalue is 0x79
   //message = 0x683A, checkvalue is 0x7C
@@ -181,19 +163,12 @@ byte HTU21D::checkCRC(uint16_t message_from_sensor, uint8_t check_value_from_sen
 
   uint32_t divsor = (uint32_t)SHIFTED_DIVISOR;
 
-  for (int i = 0 ; i < 16 ; i++) //Operate on only 16 positions of max 24. The remaining 8 are our remainder and should be zero when we're done.
-  {
-    //Serial.print("remainder: ");
-    //Serial.println(remainder, BIN);
-    //Serial.print("divsor:    ");
-    //Serial.println(divsor, BIN);
-    //Serial.println();
-
+  for (int i = 0 ; i < 16 ; i++) { //Operate on only 16 positions of max 24. The remaining 8 are our remainder and should be zero when we're done.
     if ( remainder & (uint32_t)1 << (23 - i) ) //Check if there is a one in the left position
       remainder ^= divsor;
 
     divsor >>= 1; //Rotate the divsor max 16 times so that we have 8 bits left of a remainder
   }
 
-  return (byte)remainder;
+  return (uint8_t)remainder;
 }

@@ -13,15 +13,9 @@
  
 #pragma once
 
-#if defined(ARDUINO) && ARDUINO >= 100
- #include "Arduino.h"
-#else
- #include "WProgram.h"
-#endif
+#include "mbed.h"
 
-#include <Wire.h>
-
-#define HTU21D_ADDRESS 0x40  //Unshifted 7-bit I2C address for the sensor
+#define HTU21D_ADDRESS 0x80  //8-bit I2C address for the sensor
 
 #define ERROR_I2C_TIMEOUT 	998
 #define ERROR_BAD_CRC		999
@@ -48,25 +42,17 @@ class HTU21D {
 
 public:
   HTU21D();
-
-  //Public Functions
-  void begin(TwoWire &wirePort = Wire); //If user doesn't specificy then Wire will be used
+  void begin(I2C &_i2c);
   float readHumidity(void);
   float readTemperature(void);
-  void setResolution(byte resBits);
-
-  byte readUserRegister(void);
-  void writeUserRegister(byte val);
-
-  //Public Variables
+  void setResolution(uint8_t resBits);
+  uint8_t readUserRegister(void);
+  void writeUserRegister(uint8_t val);
 
 private:
-  //Private Functions
-  TwoWire *_i2cPort; //The generic connection to user's chosen I2C hardware
+  uint8_t checkCRC(uint16_t message_from_sensor, uint8_t check_value_from_sensor);
+  uint16_t readValue(uint8_t cmd);
 
-  byte checkCRC(uint16_t message_from_sensor, uint8_t check_value_from_sensor);
-  uint16_t readValue(byte cmd);
-
-  //Private Variables
-
+  I2C *_i2c; //The generic connection to user's chosen I2C hardware
+  uint8_t _buf[3];
 };

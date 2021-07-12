@@ -1,3 +1,6 @@
+![version] [![Platforms][]][Platforms_All] [![Tested1][]][Tested1_Link]
+
+
 SparkFun Humidity and Temperature Sensor Breakout - HTU21D
 ===========================================================
 
@@ -36,3 +39,9 @@ Please use, reuse, and modify these files as you see fit. Please maintain attrib
 Distributed as-is; no warranty is given.
 
 - Your friends at SparkFun.
+
+[version]:       https://img.shields.io/badge/Mbed%20OS-6.12-green
+[Platforms]:     https://img.shields.io/badge/Platforms-All-green
+[Platforms_All]: https://os.mbed.com/platforms/
+[Tested1]:       https://img.shields.io/badge/Tested-F767-green
+[Tested1_Link]:  https://os.mbed.com/platforms/ST-Nucleo-F767ZI/

@@ -122,6 +122,67 @@ void HTU21D::setResolution(uint8_t resolution) {
   writeUserRegister(userRegister);
 }
 
+/***************************************************************************/
+/*
+    readDeviceID()
+    Reads device id
+    NOTE:
+    - see p.23 of Si7021 datasheet for details
+    - full serial number is {SNA3, SNA2, SNA1, SNA0, SNB3**, SNB2, SNB1, SNB0}
+    - **chip ID:
+        - 0x0D: Si7013
+        - 0x14: Si7020
+        - 0x15: Si7021 
+        - 0x32: HTU21D & SHT21
+*/
+/**************************************************************************/
+uint16_t HTU21D::readDeviceID(void) {
+  int ret;
+  uint16_t deviceID = 0;
+  uint8_t  checksum = 0;
+
+  /* request serial_2 -> SNB3**, SNB2, SNB1, SNB0 */
+  _buf[0] = HTU21D_SERIAL2_READ1;
+  _buf[1] = HTU21D_SERIAL2_READ2;
+  ret = _i2c->write(HTU21D_ADDRESS, (const char*)_buf, 2);
+
+  /* read serial_2 -> SNB3**, SNB2, CRC */
+  ret = _i2c->read(HTU21D_ADDRESS, (char*)_buf, 3);
+  deviceID  = _buf[0] << 8;
+  deviceID |= _buf[1];
+  checksum  = _buf[2];
+
+  if (checkCRC(deviceID, checksum) != 0) return (ERROR_BAD_CRC); //Error out
+
+  deviceID = deviceID >> 8;
+
+  return deviceID;
+}
+
+/***************************************************************************/
+/*
+    readFirmwareVersion()
+    Reads firware version
+    NOTE:
+    - see p.24 of Si7021 datasheet for details
+*/
+/**************************************************************************/
+uint16_t HTU21D::readFirmwareVersion(void) {
+  int ret;
+  uint16_t firmwareVersion = 0;
+
+  /* request firware version */
+  _buf[0] = HTU21D_FIRMWARE_READ1;
+  _buf[1] = HTU21D_FIRMWARE_READ2;
+  ret = _i2c->write(HTU21D_ADDRESS, (const char*)_buf, 2);
+
+  /* read firware version */
+  ret = _i2c->read(HTU21D_ADDRESS, (char*)_buf, 1);
+  firmwareVersion  = _buf[0];
+
+  return firmwareVersion;
+}
+
 //Read the user register
 uint8_t HTU21D::readUserRegister(void) {
   int ret;
